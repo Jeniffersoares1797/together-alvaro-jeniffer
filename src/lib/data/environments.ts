@@ -1,0 +1,118 @@
+import { Environment, EnvironmentId } from "@/types";
+
+export const ENVIRONMENTS: Record<EnvironmentId, Environment> = {
+  "garagem": {
+    id: "garagem",
+    name: "Garagem",
+    tagline: "Concreto, ferramentas, sofá gasto e chuva lá fora",
+    description: "Uma garagem residencial à noite. O carro estacionado à esquerda, a TV no suporte, a luz quente sobre a bancada e a porta aberta para a chuva suave entre as árvores.",
+    themeColor: "#d97706",
+    accentColor: "#f59e0b",
+    palette: {
+      primary: "#1c1917",
+      secondary: "#292420",
+      glow: "rgba(217, 119, 6, 0.28)",
+      surface: "rgba(38, 33, 28, 0.92)",
+      border: "rgba(255, 255, 255, 0.12)",
+      highlight: "#f59e0b",
+    },
+    decorations: {
+      hasRain: true,
+      hasLamp: true,
+      hasWindow: true,
+    },
+    lighting: {
+      primaryGlow: "radial-gradient(circle at 65% 45%, rgba(245, 158, 11, 0.25) 0%, rgba(180, 83, 9, 0.08) 55%, transparent 80%)",
+      secondaryGlow: "radial-gradient(circle at 18% 70%, rgba(245, 158, 11, 0.16) 0%, transparent 55%)",
+      ambientFilter: "contrast(102%) brightness(108%) saturate(104%)",
+      wallGradient: "linear-gradient(180deg, #27221d 0%, #1c1815 100%)",
+      floorGradient: "linear-gradient(180deg, #2c2722 0%, #1a1613 100%)",
+    },
+  },
+  "cabana": {
+    id: "cabana",
+    name: "Cabana",
+    tagline: "Madeira nobre, lareira de pedra e floresta úmida",
+    description: "Uma cabana rústica e acolhedora na serra. Janela ampla para os pinheiros, brasa da lareira e aconchego de madeira aquecida.",
+    themeColor: "#ea580c",
+    accentColor: "#f97316",
+    palette: {
+      primary: "#231810",
+      secondary: "#342418",
+      glow: "rgba(234, 88, 12, 0.30)",
+      surface: "rgba(46, 32, 22, 0.92)",
+      border: "rgba(255, 255, 255, 0.12)",
+      highlight: "#fed7aa",
+    },
+    decorations: {
+      hasFireplace: true,
+      hasLamp: true,
+      hasWindow: true,
+    },
+    lighting: {
+      primaryGlow: "radial-gradient(circle at 50% 40%, rgba(234, 88, 12, 0.28) 0%, rgba(194, 65, 12, 0.10) 55%, transparent 80%)",
+      secondaryGlow: "radial-gradient(circle at 20% 75%, rgba(249, 115, 22, 0.22) 0%, transparent 60%)",
+      ambientFilter: "contrast(102%) brightness(108%) saturate(108%)",
+      wallGradient: "linear-gradient(180deg, #2d2015 0%, #1e150e 100%)",
+      floorGradient: "linear-gradient(180deg, #38271a 0%, #1c130b 100%)",
+    },
+  },
+  "estrada": {
+    id: "estrada",
+    name: "Estrada",
+    tagline: "Viagem noturna, asfalto molhado e luzes no painel",
+    description: "A intimidade de uma viagem de carro na madrugada. O painel analógico âmbar, a chuva fina no parabrisa e a estrada cortando a serra.",
+    themeColor: "#f59e0b",
+    accentColor: "#fbbf24",
+    palette: {
+      primary: "#141923",
+      secondary: "#1f2636",
+      glow: "rgba(245, 158, 11, 0.22)",
+      surface: "rgba(26, 34, 48, 0.92)",
+      border: "rgba(255, 255, 255, 0.12)",
+      highlight: "#fde68a",
+    },
+    decorations: {
+      hasRain: true,
+      hasWindow: true,
+      hasLamp: true,
+    },
+    lighting: {
+      primaryGlow: "radial-gradient(circle at 50% 35%, rgba(245, 158, 11, 0.20) 0%, rgba(14, 18, 26, 0.08) 55%, transparent 80%)",
+      secondaryGlow: "radial-gradient(circle at 50% 85%, rgba(217, 119, 6, 0.24) 0%, transparent 50%)",
+      ambientFilter: "contrast(103%) brightness(106%) saturate(104%)",
+      wallGradient: "linear-gradient(180deg, #1c2331 0%, #121721 100%)",
+      floorGradient: "linear-gradient(180deg, #252e40 0%, #10151f 100%)",
+    },
+  },
+  "quarto": {
+    id: "quarto",
+    name: "Quarto",
+    tagline: "Abajur de linho, cama macia e chuva na vidraça",
+    description: "Um quarto calmo e protegido do mundo lá fora. A TV de frente para a cama/sofá, o abajur em luz quente e o som contínuo das gotas na janela.",
+    themeColor: "#d97706",
+    accentColor: "#fbbf24",
+    palette: {
+      primary: "#1d1a23",
+      secondary: "#2a2633",
+      glow: "rgba(217, 119, 6, 0.25)",
+      surface: "rgba(38, 34, 46, 0.92)",
+      border: "rgba(255, 255, 255, 0.12)",
+      highlight: "#fde68a",
+    },
+    decorations: {
+      hasRain: true,
+      hasLamp: true,
+      hasWindow: true,
+    },
+    lighting: {
+      primaryGlow: "radial-gradient(circle at 60% 35%, rgba(217, 119, 6, 0.22) 0%, rgba(180, 83, 9, 0.08) 50%, transparent 80%)",
+      secondaryGlow: "radial-gradient(circle at 20% 40%, rgba(245, 158, 11, 0.16) 0%, transparent 50%)",
+      ambientFilter: "contrast(102%) brightness(108%) saturate(105%)",
+      wallGradient: "linear-gradient(180deg, #282430 0%, #19171f 100%)",
+      floorGradient: "linear-gradient(180deg, #302b3a 0%, #15131b 100%)",
+    },
+  },
+};
+
+export const ENVIRONMENTS_LIST = Object.values(ENVIRONMENTS);
