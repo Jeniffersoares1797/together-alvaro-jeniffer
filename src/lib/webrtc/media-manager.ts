@@ -56,20 +56,33 @@ export class MediaManager {
           ? videoDeviceId
             ? {
                 deviceId: { exact: videoDeviceId },
-                width: { ideal: 1920, min: 1280 },
-                height: { ideal: 1080, min: 720 },
-                frameRate: { ideal: 30, min: 24 },
+                width: { ideal: 1920, max: 1920 },
+                height: { ideal: 1080, max: 1080 },
+                frameRate: { ideal: 30 },
               }
             : {
-                width: { ideal: 1920, min: 1280 },
-                height: { ideal: 1080, min: 720 },
-                frameRate: { ideal: 30, min: 24 },
+                width: { ideal: 1920, max: 1920 },
+                height: { ideal: 1080, max: 1080 },
+                frameRate: { ideal: 30 },
                 facingMode: "user",
               }
           : false,
       };
 
-      this.localStream = await navigator.mediaDevices.getUserMedia(constraints);
+      try {
+        this.localStream = await navigator.mediaDevices.getUserMedia(constraints);
+      } catch (initialErr: any) {
+        // Fallback for devices that don't support high-res video constraints
+        if (initialErr.name === "OverconstrainedError" || initialErr.name === "ConstraintNotSatisfiedError") {
+          this.localStream = await navigator.mediaDevices.getUserMedia({
+            audio: audio,
+            video: video ? { facingMode: "user" } : false,
+          });
+        } else {
+          throw initialErr;
+        }
+      }
+
       this.initVoiceActivityDetection();
       return { stream: this.localStream };
     } catch (err: any) {

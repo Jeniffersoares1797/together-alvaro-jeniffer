@@ -41,19 +41,19 @@ export function RoomHeader({
 
   return (
     <header
-      className={`fixed top-0 left-0 right-0 z-40 px-4 sm:px-6 py-3 transition-all duration-500 ${
+      className={`fixed top-0 left-0 right-0 z-40 px-3 sm:px-6 py-2.5 sm:py-3 transition-all duration-500 ${
         isCinemaMode ? "opacity-20 hover:opacity-100" : "opacity-100"
       }`}
     >
-      <div className="max-w-6xl mx-auto flex items-center justify-between">
+      <div className="max-w-6xl mx-auto flex items-center justify-between gap-2">
         {/* Left: Brand & Room Name & Environment Dropdown */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1.5 sm:gap-3 min-w-0">
           <Link
             href="/"
-            className="flex items-center gap-2 group text-stone-400 hover:text-[#ede7df] transition-colors"
+            className="flex items-center gap-2 group text-stone-400 hover:text-[#ede7df] transition-colors shrink-0"
             title="Voltar ao início"
           >
-            <span className="font-serif italic font-normal text-lg tracking-tight text-[#ede7df]">
+            <span className="font-serif italic font-normal text-base sm:text-lg tracking-tight text-[#ede7df]">
               together<span className="text-amber-400">.</span>
             </span>
           </Link>

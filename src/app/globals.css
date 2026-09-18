@@ -3,6 +3,14 @@
 :root {
   --background: #090807;
   --foreground: #f6f0e8;
+  --sat: env(safe-area-inset-top, 0px);
+  --sar: env(safe-area-inset-right, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+  --sal: env(safe-area-inset-left, 0px);
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
 }
 
 body {
@@ -11,9 +19,19 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "Plus Jakarta Sans", "SF Pro Display", "Inter", "Segoe UI", Roboto, sans-serif;
   overflow-x: hidden;
   user-select: none;
+  touch-action: manipulation;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
 
 /* Subtle Film Grain / Atmospheric Depth */
 body::before {

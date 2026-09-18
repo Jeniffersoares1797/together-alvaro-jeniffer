@@ -105,7 +105,7 @@ export function WatchModal({ isOpen, onClose, onSetVideoUrl }: WatchModalProps) 
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/85 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="relative w-full max-w-lg rounded-2xl bg-[#120f0d] border border-white/[0.08] shadow-2xl p-6 sm:p-7 text-[#ede7df]">
+      <div className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl bg-[#120f0d] border border-white/[0.08] shadow-2xl p-5 sm:p-7 text-[#ede7df]">
         <button
           onClick={onClose}
           className="absolute top-5 right-5 p-2 rounded-lg text-stone-400 hover:text-white hover:bg-white/5 transition-colors cursor-pointer"

@@ -126,7 +126,7 @@ export function ChatDrawer({
       </div>
 
       {/* Input Area */}
-      <form onSubmit={handleSubmit} className="p-4 border-t border-white/[0.08] bg-black/40">
+      <form onSubmit={handleSubmit} className="p-4 pb-[max(1rem,env(safe-area-inset-bottom))] border-t border-white/[0.08] bg-black/40">
         <div className="relative flex items-center">
           <input
             type="text"
