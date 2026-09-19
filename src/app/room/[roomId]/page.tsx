@@ -209,6 +209,8 @@ export default function RoomPage() {
     });
   }, []);
 
+  const peerLastSeenMap = useRef<Map<string, number>>(new Map());
+
   // 4. Multi-peer / Multi-device Realtime Hub Subscription & Bi-directional Handshake
   useEffect(() => {
     if (needsProfileSelection) return;
@@ -234,10 +236,16 @@ export default function RoomPage() {
 
     // Subscribe to realtime channel
     const unsubscribe = realtimeHub.subscribe(roomId, currentUser.id, (msg) => {
+      // Record heartbeat for sender
+      if (msg.senderId && msg.senderId !== currentUser.id) {
+        peerLastSeenMap.current.set(msg.senderId, Date.now());
+      }
+
       switch (msg.type) {
         case "PEER_JOIN": {
           const newPeer = msg.payload as Participant;
           if (newPeer.id !== currentUser.id) {
+            peerLastSeenMap.current.set(newPeer.id, Date.now());
             setParticipants((prev) => {
               const others = prev.filter((p) => p.id !== newPeer.id);
               return [...others, newPeer];
@@ -280,6 +288,7 @@ export default function RoomPage() {
           const syncData = msg.payload;
           if (syncData && syncData.participant) {
             const peer = syncData.participant as Participant;
+            peerLastSeenMap.current.set(peer.id, Date.now());
             setParticipants((prev) => {
               const others = prev.filter((p) => p.id !== peer.id);
               return [...others, peer];
@@ -314,6 +323,7 @@ export default function RoomPage() {
         case "PEER_PING": {
           const peer = msg.payload as Participant;
           if (peer.id !== currentUser.id) {
+            peerLastSeenMap.current.set(peer.id, Date.now());
             setParticipants((prev) => {
               const others = prev.filter((p) => p.id !== peer.id);
               return [...others, peer];
@@ -323,7 +333,9 @@ export default function RoomPage() {
         }
 
         case "PEER_LEAVE": {
-          const peerId = msg.payload.id;
+          const peerId = msg.payload.id || msg.senderId;
+          const leavingPeer = participantsRef.current.find((p) => p.id === peerId);
+          peerLastSeenMap.current.delete(peerId);
           setParticipants((prev) => prev.filter((p) => p.id !== peerId));
           setRemoteCamStreams((prev) => {
             const next = new Map(prev);
@@ -333,6 +345,9 @@ export default function RoomPage() {
           if (remoteScreenStream) {
             setRemoteScreenStream(null);
             setScreenSharerName(undefined);
+          }
+          if (leavingPeer) {
+            showToast(`${leavingPeer.name} saiu do nosso lugar.`);
           }
           break;
         }
@@ -405,7 +420,7 @@ export default function RoomPage() {
       timestamp: Date.now(),
     });
 
-    // 6. Keep-alive heartbeat ping every 8 seconds
+    // 6. Keep-alive heartbeat ping every 5 seconds
     const pingInterval = setInterval(() => {
       realtimeHub.publish({
         type: "PEER_PING",
@@ -414,17 +429,56 @@ export default function RoomPage() {
         payload: myParticipant,
         timestamp: Date.now(),
       });
-    }, 8000);
+    }, 5000);
 
-    return () => {
-      clearInterval(pingInterval);
+    // 7. Watchdog: prune disconnected / closed peers after 15s without ping
+    const watchdogInterval = setInterval(() => {
+      const now = Date.now();
+      const otherPeers = participantsRef.current.filter((p) => p.id !== currentUser.id);
+      let changed = false;
+
+      const activeOthers = otherPeers.filter((p) => {
+        const lastSeen = peerLastSeenMap.current.get(p.id);
+        // If peer hasn't sent ping in 15 seconds, mark as left
+        if (lastSeen && now - lastSeen > 15000) {
+          changed = true;
+          peerLastSeenMap.current.delete(p.id);
+          setRemoteCamStreams((prev) => {
+            const next = new Map(prev);
+            next.delete(p.id);
+            return next;
+          });
+          showToast(`${p.name} saiu do nosso lugar.`);
+          return false;
+        }
+        return true;
+      });
+
+      if (changed) {
+        setParticipants([myParticipant, ...activeOthers]);
+      }
+    }, 3500);
+
+    // 8. Handle tab close / window unload / navigation
+    const handleUnload = () => {
       realtimeHub.publish({
         type: "PEER_LEAVE",
         roomId,
         senderId: currentUser.id,
-        payload: { id: currentUser.id },
+        payload: { id: currentUser.id, name: currentUser.name },
         timestamp: Date.now(),
       });
+    };
+
+    window.addEventListener("beforeunload", handleUnload);
+    window.addEventListener("pagehide", handleUnload);
+
+    return () => {
+      window.removeEventListener("beforeunload", handleUnload);
+      window.removeEventListener("pagehide", handleUnload);
+      clearInterval(pingInterval);
+      clearInterval(watchdogInterval);
+      handleUnload();
       unsubscribe();
     };
   }, [
@@ -650,6 +704,16 @@ export default function RoomPage() {
 
   // Leave Room
   const handleLeaveRoom = () => {
+    realtimeHub.publish({
+      type: "PEER_LEAVE",
+      roomId,
+      senderId: currentUser.id,
+      payload: { id: currentUser.id, name: currentUser.name },
+      timestamp: Date.now(),
+    });
+    if (typeof window !== "undefined") {
+      localStorage.removeItem(`together_user_${roomId}`);
+    }
     soundscape?.stop();
     mediaManager.stopAll();
     p2pManager.destroy();

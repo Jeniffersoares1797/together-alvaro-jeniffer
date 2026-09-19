@@ -162,6 +162,15 @@ class RealtimeHub {
     }
 
     // 2. Post to /api/signaling for global cross-device internet sync
+    if (preparedMsg.type === "PEER_LEAVE" && typeof navigator !== "undefined" && navigator.sendBeacon) {
+      try {
+        const blob = new Blob([JSON.stringify(preparedMsg)], { type: "text/plain" });
+        navigator.sendBeacon("/api/signaling", blob);
+      } catch (e) {
+        console.warn("sendBeacon error:", e);
+      }
+    }
+
     try {
       fetch("/api/signaling", {
         method: "POST",

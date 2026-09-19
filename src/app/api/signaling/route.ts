@@ -85,7 +85,14 @@ export async function GET(req: NextRequest) {
 // POST: Publish a new signaling message to a room
 export async function POST(req: NextRequest) {
   try {
-    const body = (await req.json()) as SignalingMessage;
+    let body: SignalingMessage;
+    const contentType = req.headers.get("content-type") || "";
+    if (contentType.includes("application/json")) {
+      body = (await req.json()) as SignalingMessage;
+    } else {
+      const text = await req.text();
+      body = JSON.parse(text) as SignalingMessage;
+    }
 
     if (!body || !body.roomId || !body.senderId || !body.type) {
       return NextResponse.json({ error: "Invalid signaling message" }, { status: 400 });
