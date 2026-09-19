@@ -16,6 +16,7 @@ import {
   Minimize2,
   SunMedium,
   Moon,
+  CloudRain,
 } from "lucide-react";
 
 interface ControlBarProps {
@@ -35,6 +36,8 @@ interface ControlBarProps {
   onToggleLamp: () => void;
   isCinemaMode: boolean;
   onToggleCinemaMode: () => void;
+  isRainSoundOn?: boolean;
+  onToggleRainSound?: () => void;
   onLeaveRoom: () => void;
 }
 
@@ -54,6 +57,8 @@ export function ControlBar({
   onToggleLamp,
   isCinemaMode,
   onToggleCinemaMode,
+  isRainSoundOn,
+  onToggleRainSound,
   onLeaveRoom,
 }: ControlBarProps) {
   return (
@@ -148,7 +153,22 @@ export function ControlBar({
 
       <div className="w-[1px] h-4 sm:h-5 bg-white/[0.08] mx-0.5 shrink-0" />
 
-      {/* 8. Luz da Sala (Acender/Apagar) */}
+      {/* 8. Som de Chuva Ambiente */}
+      {onToggleRainSound && (
+        <button
+          onClick={onToggleRainSound}
+          className={`p-2 sm:p-2.5 rounded-xl transition-all flex items-center justify-center cursor-pointer shrink-0 active:scale-95 ${
+            isRainSoundOn
+              ? "bg-sky-500/20 text-sky-300 border border-sky-500/30 shadow-[0_0_12px_rgba(56,189,248,0.25)]"
+              : "bg-white/[0.06] hover:bg-white/[0.12] text-stone-400 hover:text-stone-200"
+          }`}
+          title={isRainSoundOn ? "Silenciar Som de Chuva" : "Ouvir Chuva Lá Fora"}
+        >
+          <CloudRain className="w-4 h-4" />
+        </button>
+      )}
+
+      {/* 9. Luz da Sala (Acender/Apagar) */}
       <button
         onClick={onToggleLamp}
         className={`p-2 sm:p-2.5 rounded-xl transition-all flex items-center justify-center cursor-pointer shrink-0 active:scale-95 ${
@@ -161,7 +181,7 @@ export function ControlBar({
         {isLampOn ? <SunMedium className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4" />}
       </button>
 
-      {/* 9. Modo Cinema */}
+      {/* 10. Modo Cinema */}
       <button
         onClick={onToggleCinemaMode}
         className={`p-2 sm:p-2.5 rounded-xl transition-all flex items-center justify-center cursor-pointer shrink-0 active:scale-95 ${
@@ -174,7 +194,7 @@ export function ControlBar({
         {isCinemaMode ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
       </button>
 
-      {/* 10. Sair da Sala */}
+      {/* 11. Sair da Sala */}
       <button
         onClick={onLeaveRoom}
         className="p-2 sm:p-2.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400/80 hover:text-rose-300 transition-all flex items-center justify-center cursor-pointer shrink-0 active:scale-95"

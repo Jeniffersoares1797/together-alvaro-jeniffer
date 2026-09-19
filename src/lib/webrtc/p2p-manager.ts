@@ -5,7 +5,13 @@ const ICE_SERVERS: RTCConfiguration = {
   iceServers: [
     { urls: "stun:stun.l.google.com:19302" },
     { urls: "stun:stun1.l.google.com:19302" },
+    { urls: "stun:stun2.l.google.com:19302" },
+    { urls: "stun:stun3.l.google.com:19302" },
+    { urls: "stun:stun4.l.google.com:19302" },
+    { urls: "stun:stun.services.mozilla.com" },
+    { urls: "stun:global.stun.twilio.com:3478" },
   ],
+  iceCandidatePoolSize: 10,
 };
 
 export class P2PManager {
@@ -32,7 +38,7 @@ export class P2PManager {
     this.onRemoteScreenStreamCallback = callbacks.onRemoteScreenStream;
     this.onRemoteCamStreamCallback = callbacks.onRemoteCamStream;
 
-    this.unsubscribeSignaling = realtimeHub.subscribe(roomId, async (msg: SignalingMessage) => {
+    this.unsubscribeSignaling = realtimeHub.subscribe(roomId, currentUserId, async (msg: SignalingMessage) => {
       // Ignore messages from self or destined for another peer
       if (msg.senderId === this.currentUserId) return;
       if (msg.targetId && msg.targetId !== this.currentUserId) return;

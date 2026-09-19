@@ -32,8 +32,8 @@ export const ENVIRONMENTS: Record<EnvironmentId, Environment> = {
   "cabana": {
     id: "cabana",
     name: "Cabana",
-    tagline: "Madeira nobre, lareira de pedra e floresta úmida",
-    description: "Uma cabana rústica e acolhedora na serra. Janela ampla para os pinheiros, brasa da lareira e aconchego de madeira aquecida.",
+    tagline: "Madeira nobre, lareira de pedra e chuva na floresta",
+    description: "Uma cabana rústica e acolhedora na serra. Janela panorâmica para os pinheiros sob chuva constante, brasas da lareira crepitante e assoalho de madeira aquecida.",
     themeColor: "#ea580c",
     accentColor: "#f97316",
     palette: {
@@ -45,6 +45,7 @@ export const ENVIRONMENTS: Record<EnvironmentId, Environment> = {
       highlight: "#fed7aa",
     },
     decorations: {
+      hasRain: true,
       hasFireplace: true,
       hasLamp: true,
       hasWindow: true,

@@ -8,6 +8,7 @@ import { mediaManager } from "@/lib/webrtc/media-manager";
 import { realtimeHub } from "@/lib/webrtc/broadcast-signaling";
 import { p2pManager } from "@/lib/webrtc/p2p-manager";
 import { useMemories } from "@/lib/store/use-memories";
+import { soundscape } from "@/lib/audio/soundscapes";
 
 // Components
 import { RoomScene } from "@/components/room/RoomScene";
@@ -62,6 +63,7 @@ export default function RoomPage() {
   // Atmosphere States
   const [isLampOn, setIsLampOn] = useState(true);
   const [isCinemaMode, setIsCinemaMode] = useState(false);
+  const [isRainSoundOn, setIsRainSoundOn] = useState(false);
 
   // Video / Watch Party States
   const [currentVideoUrl, setCurrentVideoUrl] = useState<string | undefined>(undefined);
@@ -87,31 +89,39 @@ export default function RoomPage() {
   const participantsRef = useRef<Participant[]>([]);
   participantsRef.current = participants;
 
+  // Quick identity selection modal state (if joining directly via link without saved profile)
+  const [needsProfileSelection, setNeedsProfileSelection] = useState(false);
+  const [customJoinName, setCustomJoinName] = useState("");
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  // 1. Initialize user from localStorage or generate
+  // 1. Initialize user from localStorage or trigger profile picker
   useEffect(() => {
     if (typeof window !== "undefined") {
       const storedUser = localStorage.getItem(`together_user_${roomId}`);
       const storedEnv = localStorage.getItem(`together_env_${roomId}`) as EnvironmentId;
       const storedName = localStorage.getItem(`together_name_${roomId}`);
 
-      let userObj = currentUser;
       if (storedUser) {
         try {
           const parsed = JSON.parse(storedUser);
-          userObj = {
+          setCurrentUser({
             id: parsed.id || `user-${Math.random().toString(36).substring(2, 7)}`,
             name: parsed.name || "Você",
-            avatar: parsed.avatar || "V",
-            color: parsed.color || "from-amber-600 to-amber-500",
+            avatar: parsed.avatar || (parsed.name ? parsed.name.charAt(0).toUpperCase() : "V"),
+            color: parsed.color || "bg-[#2b2219] text-amber-300 border-[#4a3a2a]",
             isHost: !!parsed.isHost,
-          };
-          setCurrentUser(userObj);
-        } catch (e) {}
+          });
+          setNeedsProfileSelection(false);
+        } catch (e) {
+          setNeedsProfileSelection(true);
+        }
+      } else {
+        // Direct link visitor without prior profile
+        setNeedsProfileSelection(true);
       }
 
       if (storedEnv && ENVIRONMENTS[storedEnv]) {
@@ -128,13 +138,33 @@ export default function RoomPage() {
           senderId: "system",
           senderName: "Together",
           senderColor: "",
-          content: `Bem-vindo(a) ao ambiente "${ENVIRONMENTS[storedEnv || "garagem"]?.name}". Sente-se e aproveite o momento.`,
+          content: `Nosso lugar está pronto. Sente-se, relaxe e aproveite o momento.`,
           timestamp: new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
           isSystem: true,
         },
       ]);
     }
   }, [roomId]);
+
+  // Handler for 1-click identity selection for direct link visitors
+  const handleSelectIdentity = (name: string, color: string) => {
+    const avatar = name.charAt(0).toUpperCase();
+    const newUser = {
+      id: `user-${Math.random().toString(36).substring(2, 7)}`,
+      name,
+      avatar,
+      color,
+      isHost: false,
+    };
+
+    if (typeof window !== "undefined") {
+      localStorage.setItem(`together_user_${roomId}`, JSON.stringify(newUser));
+    }
+
+    setCurrentUser(newUser);
+    setNeedsProfileSelection(false);
+    showToast(`Entrou como ${name} ✨`);
+  };
 
   // 2. Initialize P2P WebRTC manager for Screen Share & HD Camera
   useEffect(() => {
@@ -179,8 +209,10 @@ export default function RoomPage() {
     });
   }, []);
 
-  // 4. Multi-peer / Multi-tab Realtime Hub Subscription
+  // 4. Multi-peer / Multi-device Realtime Hub Subscription & Bi-directional Handshake
   useEffect(() => {
+    if (needsProfileSelection) return;
+
     const myParticipant: Participant = {
       id: currentUser.id,
       name: currentUser.name,
@@ -201,18 +233,73 @@ export default function RoomPage() {
     });
 
     // Subscribe to realtime channel
-    const unsubscribe = realtimeHub.subscribe(roomId, (msg) => {
+    const unsubscribe = realtimeHub.subscribe(roomId, currentUser.id, (msg) => {
       switch (msg.type) {
-        case "PEER_JOIN":
-        case "PEER_UPDATE": {
-          const peer = msg.payload as Participant;
-          if (peer.id !== currentUser.id) {
+        case "PEER_JOIN": {
+          const newPeer = msg.payload as Participant;
+          if (newPeer.id !== currentUser.id) {
+            setParticipants((prev) => {
+              const others = prev.filter((p) => p.id !== newPeer.id);
+              return [...others, newPeer];
+            });
+
+            // Immediately reply back to the joining peer with our state & room state
+            realtimeHub.publish({
+              type: "PEER_SYNC_REPLY",
+              roomId,
+              senderId: currentUser.id,
+              targetId: newPeer.id,
+              payload: {
+                participant: myParticipant,
+                roomState: {
+                  environmentId,
+                  roomName,
+                  isLampOn,
+                  isCinemaMode,
+                  currentVideoUrl,
+                  currentVideoTitle,
+                },
+              },
+              timestamp: Date.now(),
+            });
+
+            showToast(`${newPeer.name} entrou no nosso lugar! ❤️`);
+
+            // If streaming, send media to newly joined peer
+            if (localScreenStream && isScreenSharing) {
+              p2pManager.broadcastScreenStream(localScreenStream, [newPeer.id]);
+            }
+            if (localCamStream && isVideoEnabled) {
+              p2pManager.broadcastCamStream(localCamStream, [newPeer.id]);
+            }
+          }
+          break;
+        }
+
+        case "PEER_SYNC_REPLY": {
+          const syncData = msg.payload;
+          if (syncData && syncData.participant) {
+            const peer = syncData.participant as Participant;
             setParticipants((prev) => {
               const others = prev.filter((p) => p.id !== peer.id);
               return [...others, peer];
             });
 
-            // If I am currently streaming screen or cam, send to newly joined peer
+            // Sync room state from peer if provided
+            if (syncData.roomState) {
+              if (syncData.roomState.environmentId) setEnvironmentId(syncData.roomState.environmentId);
+              if (syncData.roomState.roomName) setRoomName(syncData.roomState.roomName);
+              if (typeof syncData.roomState.isLampOn === "boolean") setIsLampOn(syncData.roomState.isLampOn);
+              if (typeof syncData.roomState.isCinemaMode === "boolean") setIsCinemaMode(syncData.roomState.isCinemaMode);
+              if (syncData.roomState.currentVideoUrl) {
+                setCurrentVideoUrl(syncData.roomState.currentVideoUrl);
+                setCurrentVideoTitle(syncData.roomState.currentVideoTitle);
+              }
+            }
+
+            showToast(`${peer.name} está aqui com você! ✨`);
+
+            // If streaming, broadcast to this peer
             if (localScreenStream && isScreenSharing) {
               p2pManager.broadcastScreenStream(localScreenStream, [peer.id]);
             }
@@ -222,6 +309,19 @@ export default function RoomPage() {
           }
           break;
         }
+
+        case "PEER_UPDATE":
+        case "PEER_PING": {
+          const peer = msg.payload as Participant;
+          if (peer.id !== currentUser.id) {
+            setParticipants((prev) => {
+              const others = prev.filter((p) => p.id !== peer.id);
+              return [...others, peer];
+            });
+          }
+          break;
+        }
+
         case "PEER_LEAVE": {
           const peerId = msg.payload.id;
           setParticipants((prev) => prev.filter((p) => p.id !== peerId));
@@ -236,6 +336,7 @@ export default function RoomPage() {
           }
           break;
         }
+
         case "CHAT_MESSAGE": {
           const chatMsg = msg.payload as ChatMessage;
           setChatMessages((prev) => [...prev, chatMsg]);
@@ -244,19 +345,34 @@ export default function RoomPage() {
           }
           break;
         }
+
+        case "REACTION": {
+          const react = msg.payload as FloatingReaction;
+          if (react && react.emoji) {
+            setFloatingReactions((prev) => [...prev, react]);
+            setTimeout(() => {
+              setFloatingReactions((prev) => prev.filter((r) => r.id !== react.id));
+            }, 3200);
+          }
+          break;
+        }
+
         case "ROOM_UPDATE": {
           if (msg.payload.environmentId) setEnvironmentId(msg.payload.environmentId);
           if (msg.payload.roomName) setRoomName(msg.payload.roomName);
           break;
         }
+
         case "CINEMA_TOGGLE": {
           setIsCinemaMode(msg.payload.isCinemaMode);
           break;
         }
+
         case "LAMP_TOGGLE": {
           setIsLampOn(msg.payload.isLampOn);
           break;
         }
+
         case "WATCH_SYNC": {
           setCurrentVideoUrl(msg.payload.url);
           setCurrentVideoTitle(msg.payload.title);
@@ -266,7 +382,7 @@ export default function RoomPage() {
       }
     });
 
-    // Announce presence
+    // 5. Broadcast our presence to the room
     realtimeHub.publish({
       type: "PEER_JOIN",
       roomId,
@@ -275,7 +391,19 @@ export default function RoomPage() {
       timestamp: Date.now(),
     });
 
+    // 6. Keep-alive heartbeat ping every 8 seconds
+    const pingInterval = setInterval(() => {
+      realtimeHub.publish({
+        type: "PEER_PING",
+        roomId,
+        senderId: currentUser.id,
+        payload: myParticipant,
+        timestamp: Date.now(),
+      });
+    }, 8000);
+
     return () => {
+      clearInterval(pingInterval);
       realtimeHub.publish({
         type: "PEER_LEAVE",
         roomId,
@@ -285,7 +413,24 @@ export default function RoomPage() {
       });
       unsubscribe();
     };
-  }, [roomId, currentUser, isAudioEnabled, isVideoEnabled, isScreenSharing, isSpeaking, isChatOpen, localScreenStream, localCamStream]);
+  }, [
+    roomId,
+    currentUser,
+    needsProfileSelection,
+    isAudioEnabled,
+    isVideoEnabled,
+    isScreenSharing,
+    isSpeaking,
+    isChatOpen,
+    environmentId,
+    roomName,
+    isLampOn,
+    isCinemaMode,
+    currentVideoUrl,
+    currentVideoTitle,
+    localScreenStream,
+    localCamStream,
+  ]);
 
   // Toggle Audio (getUserMedia)
   const handleToggleAudio = async () => {
@@ -388,7 +533,7 @@ export default function RoomPage() {
       id: `react-${Date.now()}-${Math.random()}`,
       emoji,
       senderName: currentUser.name,
-      xPosition: 90,
+      xPosition: Math.floor(Math.random() * 30) + 65,
       createdAt: Date.now(),
     };
 
@@ -396,6 +541,14 @@ export default function RoomPage() {
     setTimeout(() => {
       setFloatingReactions((prev) => prev.filter((r) => r.id !== reaction.id));
     }, 3200);
+
+    realtimeHub.publish({
+      type: "REACTION",
+      roomId,
+      senderId: currentUser.id,
+      payload: reaction,
+      timestamp: Date.now(),
+    });
   };
 
   // Environment Switcher
@@ -466,8 +619,23 @@ export default function RoomPage() {
     handleSendReaction("❤️");
   };
 
+  // Rain Ambient Audio Toggle
+  const handleToggleRainSound = () => {
+    const nextState = !isRainSoundOn;
+    setIsRainSoundOn(nextState);
+
+    if (nextState) {
+      soundscape?.play("rain", 0.4);
+      showToast("Chuva suave lá fora ligada 🌧️");
+    } else {
+      soundscape?.stop();
+      showToast("Som de chuva pausado");
+    }
+  };
+
   // Leave Room
   const handleLeaveRoom = () => {
+    soundscape?.stop();
     mediaManager.stopAll();
     p2pManager.destroy();
     router.push("/");
@@ -547,6 +715,8 @@ export default function RoomPage() {
         onToggleLamp={handleToggleLamp}
         isCinemaMode={isCinemaMode}
         onToggleCinemaMode={handleToggleCinemaMode}
+        isRainSoundOn={isRainSoundOn}
+        onToggleRainSound={handleToggleRainSound}
         onLeaveRoom={handleLeaveRoom}
       />
 
@@ -628,6 +798,77 @@ export default function RoomPage() {
         roomId={roomId}
         roomName={roomName}
       />
+
+      {/* Direct Link Visitor Identity Picker Modal */}
+      {needsProfileSelection && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/90 backdrop-blur-md animate-in fade-in duration-300">
+          <div className="relative w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl bg-[#120f0d] border border-amber-500/30 shadow-2xl p-6 sm:p-8 text-[#ede7df] text-center">
+            <div className="w-12 h-12 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-300 mx-auto mb-4">
+              <span className="text-xl">✨</span>
+            </div>
+
+            <h2 className="text-xl font-medium text-[#ede7df]">
+              Bem-vindo(a) ao nosso lugar!
+            </h2>
+            <p className="text-xs text-stone-400 mt-1 mb-6">
+              Quem está entrando agora para passarmos tempo juntos?
+            </p>
+
+            <div className="grid grid-cols-2 gap-3 mb-4">
+              <button
+                type="button"
+                onClick={() => handleSelectIdentity("Alvaro", "bg-[#2b2219] text-amber-300 border-[#4a3a2a]")}
+                className="p-4 rounded-2xl bg-[#1c1815] border border-[#3d3226] hover:border-amber-400/60 transition-all flex flex-col items-center gap-2 cursor-pointer group active:scale-95"
+              >
+                <div className="w-12 h-12 rounded-full bg-[#2b2219] border-2 border-[#4a3a2a] group-hover:border-amber-400 flex items-center justify-center text-amber-300 font-bold text-lg">
+                  A
+                </div>
+                <div className="text-sm font-semibold text-[#ede7df] group-hover:text-amber-300">
+                  Álvaro
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleSelectIdentity("Jeniffer", "bg-[#2e1c18] text-rose-300 border-[#4a2e27]")}
+                className="p-4 rounded-2xl bg-[#1c1815] border border-[#3d2520] hover:border-rose-400/60 transition-all flex flex-col items-center gap-2 cursor-pointer group active:scale-95"
+              >
+                <div className="w-12 h-12 rounded-full bg-[#2e1c18] border-2 border-[#4a2e27] group-hover:border-rose-400 flex items-center justify-center text-rose-300 font-bold text-lg">
+                  J
+                </div>
+                <div className="text-sm font-semibold text-[#ede7df] group-hover:text-rose-300">
+                  Jeniffer
+                </div>
+              </button>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (customJoinName.trim()) {
+                  handleSelectIdentity(customJoinName.trim(), "bg-[#1f242e] text-blue-300 border-[#323d4f]");
+                }
+              }}
+              className="mt-3 flex items-center gap-2 pt-3 border-t border-white/10"
+            >
+              <input
+                type="text"
+                value={customJoinName}
+                onChange={(e) => setCustomJoinName(e.target.value)}
+                placeholder="Ou digite outro nome..."
+                className="flex-1 px-3.5 py-2.5 rounded-xl bg-[#090807] border border-white/10 text-xs text-[#ede7df] placeholder:text-stone-600 focus:outline-none focus:border-amber-400/50"
+              />
+              <button
+                type="submit"
+                disabled={!customJoinName.trim()}
+                className="px-4 py-2.5 rounded-xl bg-amber-400 hover:bg-amber-300 disabled:opacity-30 text-stone-950 text-xs font-semibold shrink-0 cursor-pointer transition-all"
+              >
+                Entrar
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

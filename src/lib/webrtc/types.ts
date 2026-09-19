@@ -4,6 +4,8 @@ export type SignalingMessageType =
   | "PEER_JOIN"
   | "PEER_LEAVE"
   | "PEER_UPDATE"
+  | "PEER_PING"
+  | "PEER_SYNC_REPLY"
   | "CHAT_MESSAGE"
   | "REACTION"
   | "ROOM_UPDATE"
