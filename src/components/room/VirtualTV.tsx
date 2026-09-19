@@ -37,12 +37,24 @@ export function VirtualTV({
   const hasActiveMedia = !!(screenStream || videoUrl);
 
   useEffect(() => {
-    if (videoRef.current && screenStream) {
-      videoRef.current.srcObject = screenStream;
-      videoRef.current.muted = isScreenSharingByMe || isAudioMuted;
-      videoRef.current.play().catch((err) => {
-        console.warn("Video auto-play warning:", err);
-      });
+    const video = videoRef.current;
+    if (video && screenStream) {
+      video.srcObject = screenStream;
+      video.muted = isScreenSharingByMe || isAudioMuted;
+
+      const attemptPlay = () => {
+        const playPromise = video.play();
+        if (playPromise !== undefined) {
+          playPromise.catch((err) => {
+            console.warn("Video auto-play restricted, attempting muted fallback:", err);
+            video.muted = true;
+            video.play().catch(() => {});
+          });
+        }
+      };
+
+      video.onloadedmetadata = () => attemptPlay();
+      attemptPlay();
     }
   }, [screenStream, isScreenSharingByMe, isAudioMuted]);
 

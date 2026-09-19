@@ -18,6 +18,7 @@ export type SignalingMessageType =
   | "P2P_OFFER"
   | "P2P_ANSWER"
   | "P2P_ICE_CANDIDATE"
+  | "SCREEN_SHARE_STARTED"
   | "SCREEN_SHARE_STOPPED";
 
 export interface SignalingMessage {

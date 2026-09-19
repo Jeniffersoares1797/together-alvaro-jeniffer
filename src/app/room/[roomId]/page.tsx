@@ -379,6 +379,20 @@ export default function RoomPage() {
           showToast(`Vídeo sincronizado: ${msg.payload.title}`);
           break;
         }
+
+        case "SCREEN_SHARE_STARTED": {
+          const sender = participantsRef.current.find((p) => p.id === msg.senderId);
+          setScreenSharerName(sender?.name || "Participante");
+          showToast(`${sender?.name || "Alguém"} iniciou a transmissão de tela na TV! 📺`);
+          break;
+        }
+
+        case "SCREEN_SHARE_STOPPED": {
+          setRemoteScreenStream(null);
+          setScreenSharerName(undefined);
+          showToast("Transmissão de tela encerrada.");
+          break;
+        }
       }
     });
 
@@ -457,7 +471,7 @@ export default function RoomPage() {
       if (res.stream) {
         setIsVideoEnabled(true);
         setLocalCamStream(res.stream);
-        const peerIds = participants.filter((p) => p.id !== currentUser.id).map((p) => p.id);
+        const peerIds = participantsRef.current.filter((p) => p.id !== currentUser.id).map((p) => p.id);
         p2pManager.broadcastCamStream(res.stream, peerIds);
         showToast("Câmera ativada!");
       } else if (!res.cancelled && res.error) {
@@ -466,7 +480,7 @@ export default function RoomPage() {
     } else {
       mediaManager.toggleVideo(false);
       setIsVideoEnabled(false);
-      const peerIds = participants.filter((p) => p.id !== currentUser.id).map((p) => p.id);
+      const peerIds = participantsRef.current.filter((p) => p.id !== currentUser.id).map((p) => p.id);
       p2pManager.stopCamStream(peerIds);
     }
   };
@@ -477,7 +491,7 @@ export default function RoomPage() {
       mediaManager.stopScreenShare();
       setLocalScreenStream(null);
       setIsScreenSharing(false);
-      const peerIds = participants.filter((p) => p.id !== currentUser.id).map((p) => p.id);
+      const peerIds = participantsRef.current.filter((p) => p.id !== currentUser.id).map((p) => p.id);
       p2pManager.stopBroadcastingScreen(peerIds);
     } else {
       const res = await mediaManager.startScreenShare();
@@ -487,7 +501,7 @@ export default function RoomPage() {
         setLocalScreenStream(res.stream);
         setIsScreenSharing(true);
 
-        const peerIds = participants.filter((p) => p.id !== currentUser.id).map((p) => p.id);
+        const peerIds = participantsRef.current.filter((p) => p.id !== currentUser.id).map((p) => p.id);
         p2pManager.broadcastScreenStream(res.stream, peerIds);
         handleSendMessage("iniciou o compartilhamento de tela + áudio na TV.");
 
@@ -496,7 +510,8 @@ export default function RoomPage() {
           videoTrack.onended = () => {
             setLocalScreenStream(null);
             setIsScreenSharing(false);
-            p2pManager.stopBroadcastingScreen(peerIds);
+            const currentPeers = participantsRef.current.filter((p) => p.id !== currentUser.id).map((p) => p.id);
+            p2pManager.stopBroadcastingScreen(currentPeers);
           };
         }
       } else if (!res.cancelled && res.error) {
