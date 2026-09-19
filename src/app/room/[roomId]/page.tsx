@@ -85,7 +85,7 @@ export default function RoomPage() {
   const [isInviteOpen, setIsInviteOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  const { memories, saveMemory, deleteMemory } = useMemories();
+  const { memories, saveMemory, addExternalMemory, deleteMemory } = useMemories();
   const participantsRef = useRef<Participant[]>([]);
   participantsRef.current = participants;
 
@@ -395,6 +395,21 @@ export default function RoomPage() {
           break;
         }
 
+        case "MEMORY_SAVED": {
+          if (msg.payload) {
+            addExternalMemory(msg.payload);
+            showToast(`✨ Novo momento guardado no álbum: "${msg.payload.title}"`);
+          }
+          break;
+        }
+
+        case "MEMORY_DELETED": {
+          if (msg.payload?.id) {
+            deleteMemory(msg.payload.id);
+          }
+          break;
+        }
+
         case "SCREEN_SHARE_STARTED": {
           const sender = participantsRef.current.find((p) => p.id === msg.senderId);
           setScreenSharerName(sender?.name || "Participante");
@@ -675,7 +690,7 @@ export default function RoomPage() {
   // Save Moment
   const handleSaveMoment = (title: string, note?: string) => {
     const participantNames = participants.map((p) => p.name);
-    saveMemory({
+    const saved = saveMemory({
       roomId,
       roomName,
       environmentName: ENVIRONMENTS[environmentId].name,
@@ -684,8 +699,28 @@ export default function RoomPage() {
       participants: participantNames,
     });
 
+    realtimeHub.publish({
+      type: "MEMORY_SAVED",
+      roomId,
+      senderId: currentUser.id,
+      payload: saved,
+      timestamp: Date.now(),
+    });
+
     showToast(`Momento "${title}" guardado com carinho!`);
     handleSendReaction("❤️");
+  };
+
+  // Delete Memory
+  const handleDeleteMemory = (id: string) => {
+    deleteMemory(id);
+    realtimeHub.publish({
+      type: "MEMORY_DELETED",
+      roomId,
+      senderId: currentUser.id,
+      payload: { id },
+      timestamp: Date.now(),
+    });
   };
 
   // Rain Ambient Audio Toggle
@@ -822,6 +857,8 @@ export default function RoomPage() {
         onClose={() => setIsActivitiesOpen(false)}
         activeTab={activeActivityTab}
         onSelectActivity={setActiveActivityTab}
+        roomId={roomId}
+        currentUserId={currentUser.id}
         onShareMood={(moodText, emoji) => {
           handleSendMessage(`está se sentindo: ${moodText}`);
           handleSendReaction(emoji);
@@ -834,7 +871,7 @@ export default function RoomPage() {
         onClose={() => setIsMemoriesOpen(false)}
         memories={memories}
         onSaveNewMemory={handleSaveMoment}
-        onDeleteMemory={deleteMemory}
+        onDeleteMemory={handleDeleteMemory}
         currentRoomName={roomName}
         currentEnvName={ENVIRONMENTS[environmentId].name}
         participants={participants.map((p) => p.name)}

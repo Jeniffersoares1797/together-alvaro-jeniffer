@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { X, Sparkles, MessageCircle, Film, HeartHandshake, PenTool, Shuffle, Check, Copy, Share2, RotateCcw } from "lucide-react";
 import { ActiveActivity, ConversationCard } from "@/types";
 import { CONVERSATION_CARDS, MOVIE_SUGGESTIONS, MOOD_PRESETS } from "@/lib/data/activities";
+import { realtimeHub } from "@/lib/webrtc/broadcast-signaling";
 
 interface ActivitiesModalProps {
   isOpen: boolean;
@@ -13,6 +14,8 @@ interface ActivitiesModalProps {
   onSelectMovieToWatch?: (title: string) => void;
   onShareMood?: (moodText: string, emoji: string) => void;
   onSaveMoment?: (title: string, activityName: string) => void;
+  roomId?: string;
+  currentUserId?: string;
 }
 
 export function ActivitiesModal({
@@ -23,6 +26,8 @@ export function ActivitiesModal({
   onSelectMovieToWatch,
   onShareMood,
   onSaveMoment,
+  roomId = "default-room",
+  currentUserId = "user-1",
 }: ActivitiesModalProps) {
   const [currentTab, setCurrentTab] = useState<ActiveActivity>(activeTab === "none" ? "conversations" : activeTab);
   
@@ -41,15 +46,88 @@ export function ActivitiesModal({
 
   // Doodle state
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const lastPosRef = useRef<{ x: number; y: number } | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [brushColor, setBrushColor] = useState("#fbbf24");
   const [brushSize, setBrushSize] = useState(4);
+  const savedDoodleDataRef = useRef<ImageData | null>(null);
 
   useEffect(() => {
     if (activeTab !== "none") {
       setCurrentTab(activeTab);
     }
   }, [activeTab]);
+
+  // Listen to remote real-time activity events
+  useEffect(() => {
+    if (!roomId) return;
+
+    const unsubscribe = realtimeHub.subscribe(roomId, currentUserId, (msg) => {
+      if (msg.roomId !== roomId || msg.senderId === currentUserId) return;
+
+      switch (msg.type) {
+        case "DOODLE_DRAW": {
+          const canvas = canvasRef.current;
+          if (!canvas) return;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) return;
+          const { fromX, fromY, toX, toY, color, size } = msg.payload;
+          ctx.beginPath();
+          ctx.strokeStyle = color;
+          ctx.lineWidth = size;
+          ctx.lineCap = "round";
+          ctx.lineJoin = "round";
+          ctx.moveTo(fromX, fromY);
+          ctx.lineTo(toX, toY);
+          ctx.stroke();
+          // Cache image data
+          savedDoodleDataRef.current = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          break;
+        }
+
+        case "DOODLE_CLEAR": {
+          const canvas = canvasRef.current;
+          if (!canvas) return;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) return;
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          savedDoodleDataRef.current = null;
+          break;
+        }
+
+        case "CONVERSATION_SYNC": {
+          if (msg.payload.selectedCategory !== undefined) {
+            setSelectedCategory(msg.payload.selectedCategory);
+          }
+          if (typeof msg.payload.cardIndex === "number") {
+            setCardIndex(msg.payload.cardIndex);
+          }
+          break;
+        }
+
+        case "ACTIVITY_CHANGE": {
+          if (msg.payload.tab) {
+            setCurrentTab(msg.payload.tab);
+          }
+          break;
+        }
+      }
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, [roomId, currentUserId]);
+
+  // Restore canvas drawing when entering doodle tab
+  useEffect(() => {
+    if (currentTab === "doodle" && canvasRef.current && savedDoodleDataRef.current) {
+      const ctx = canvasRef.current.getContext("2d");
+      if (ctx) {
+        ctx.putImageData(savedDoodleDataRef.current, 0, 0);
+      }
+    }
+  }, [currentTab]);
 
   if (!isOpen) return null;
 
@@ -60,12 +138,51 @@ export function ActivitiesModal({
   const currentCard = filteredCards[cardIndex % filteredCards.length];
 
   const handleNextCard = () => {
-    setCardIndex((prev) => (prev + 1) % filteredCards.length);
+    const nextIdx = (cardIndex + 1) % filteredCards.length;
+    setCardIndex(nextIdx);
+    realtimeHub.publish({
+      type: "CONVERSATION_SYNC",
+      roomId,
+      senderId: currentUserId,
+      payload: { cardIndex: nextIdx, selectedCategory },
+      timestamp: Date.now(),
+    });
   };
 
   const handleShuffleCard = () => {
     const nextIdx = Math.floor(Math.random() * filteredCards.length);
     setCardIndex(nextIdx);
+    realtimeHub.publish({
+      type: "CONVERSATION_SYNC",
+      roomId,
+      senderId: currentUserId,
+      payload: { cardIndex: nextIdx, selectedCategory },
+      timestamp: Date.now(),
+    });
+  };
+
+  const handleSelectCategory = (catId: string) => {
+    setSelectedCategory(catId);
+    setCardIndex(0);
+    realtimeHub.publish({
+      type: "CONVERSATION_SYNC",
+      roomId,
+      senderId: currentUserId,
+      payload: { cardIndex: 0, selectedCategory: catId },
+      timestamp: Date.now(),
+    });
+  };
+
+  const handleTabChange = (newTab: ActiveActivity) => {
+    setCurrentTab(newTab);
+    onSelectActivity(newTab);
+    realtimeHub.publish({
+      type: "ACTIVITY_CHANGE",
+      roomId,
+      senderId: currentUserId,
+      payload: { tab: newTab },
+      timestamp: Date.now(),
+    });
   };
 
   // Movie suggestions actions
@@ -91,8 +208,8 @@ export function ActivitiesModal({
     canvas: HTMLCanvasElement
   ) => {
     const rect = canvas.getBoundingClientRect();
-    const clientX = "touches" in e && e.touches.length > 0 ? e.touches[0].clientX : "clientX" in e ? e.clientX : 0;
-    const clientY = "touches" in e && e.touches.length > 0 ? e.touches[0].clientY : "clientY" in e ? e.clientY : 0;
+    const clientX = "touches" in e && e.touches.length > 0 ? e.touches[0].clientX : "clientX" in e ? (e as React.MouseEvent).clientX : 0;
+    const clientY = "touches" in e && e.touches.length > 0 ? e.touches[0].clientY : "clientY" in e ? (e as React.MouseEvent).clientY : 0;
 
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
@@ -110,31 +227,81 @@ export function ActivitiesModal({
     if (!ctx) return;
 
     const { x, y } = getCoordinates(e, canvas);
+    lastPosRef.current = { x, y };
 
     ctx.beginPath();
-    ctx.moveTo(x, y);
     ctx.strokeStyle = brushColor;
     ctx.lineWidth = brushSize;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
+    ctx.moveTo(x, y);
+    ctx.lineTo(x, y);
+    ctx.stroke();
     setIsDrawing(true);
+
+    realtimeHub.publish({
+      type: "DOODLE_DRAW",
+      roomId,
+      senderId: currentUserId,
+      payload: {
+        fromX: x,
+        fromY: y,
+        toX: x,
+        toY: y,
+        color: brushColor,
+        size: brushSize,
+      },
+      timestamp: Date.now(),
+    });
   };
 
   const draw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
-    if (!isDrawing) return;
+    if (!isDrawing || !lastPosRef.current) return;
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
     const { x, y } = getCoordinates(e, canvas);
+    const fromX = lastPosRef.current.x;
+    const fromY = lastPosRef.current.y;
 
+    ctx.beginPath();
+    ctx.strokeStyle = brushColor;
+    ctx.lineWidth = brushSize;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.moveTo(fromX, fromY);
     ctx.lineTo(x, y);
     ctx.stroke();
+
+    lastPosRef.current = { x, y };
+
+    realtimeHub.publish({
+      type: "DOODLE_DRAW",
+      roomId,
+      senderId: currentUserId,
+      payload: {
+        fromX,
+        fromY,
+        toX: x,
+        toY: y,
+        color: brushColor,
+        size: brushSize,
+      },
+      timestamp: Date.now(),
+    });
   };
 
   const stopDrawing = () => {
+    if (isDrawing && canvasRef.current) {
+      const ctx = canvasRef.current.getContext("2d");
+      if (ctx) {
+        savedDoodleDataRef.current = ctx.getImageData(0, 0, canvasRef.current.width, canvasRef.current.height);
+      }
+    }
     setIsDrawing(false);
+    lastPosRef.current = null;
   };
 
   const clearCanvas = () => {
@@ -143,6 +310,15 @@ export function ActivitiesModal({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    savedDoodleDataRef.current = null;
+
+    realtimeHub.publish({
+      type: "DOODLE_CLEAR",
+      roomId,
+      senderId: currentUserId,
+      payload: {},
+      timestamp: Date.now(),
+    });
   };
 
   const handleShareMoodSubmit = (e: React.FormEvent) => {
@@ -186,10 +362,7 @@ export function ActivitiesModal({
         {/* Activity Tabs */}
         <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none mb-6 border-b border-white/[0.08]">
           <button
-            onClick={() => {
-              setCurrentTab("conversations");
-              onSelectActivity("conversations");
-            }}
+            onClick={() => handleTabChange("conversations")}
             className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium transition-all shrink-0 cursor-pointer ${
               currentTab === "conversations"
                 ? "bg-amber-400/15 text-amber-200 border border-amber-400/40 shadow-sm"
@@ -201,10 +374,7 @@ export function ActivitiesModal({
           </button>
 
           <button
-            onClick={() => {
-              setCurrentTab("movies");
-              onSelectActivity("movies");
-            }}
+            onClick={() => handleTabChange("movies")}
             className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium transition-all shrink-0 cursor-pointer ${
               currentTab === "movies"
                 ? "bg-amber-400/15 text-amber-200 border border-amber-400/40 shadow-sm"
@@ -216,10 +386,7 @@ export function ActivitiesModal({
           </button>
 
           <button
-            onClick={() => {
-              setCurrentTab("mood");
-              onSelectActivity("mood");
-            }}
+            onClick={() => handleTabChange("mood")}
             className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium transition-all shrink-0 cursor-pointer ${
               currentTab === "mood"
                 ? "bg-amber-400/15 text-amber-200 border border-amber-400/40 shadow-sm"
@@ -231,10 +398,7 @@ export function ActivitiesModal({
           </button>
 
           <button
-            onClick={() => {
-              setCurrentTab("doodle");
-              onSelectActivity("doodle");
-            }}
+            onClick={() => handleTabChange("doodle")}
             className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-medium transition-all shrink-0 cursor-pointer ${
               currentTab === "doodle"
                 ? "bg-amber-400/15 text-amber-200 border border-amber-400/40 shadow-sm"
@@ -260,10 +424,7 @@ export function ActivitiesModal({
               ].map((cat) => (
                 <button
                   key={cat.id}
-                  onClick={() => {
-                    setSelectedCategory(cat.id);
-                    setCardIndex(0);
-                  }}
+                  onClick={() => handleSelectCategory(cat.id)}
                   className={`px-3 py-1 rounded-full text-[11px] font-medium transition-colors cursor-pointer ${
                     selectedCategory === cat.id
                       ? "bg-amber-300 text-stone-950 font-semibold shadow-sm"

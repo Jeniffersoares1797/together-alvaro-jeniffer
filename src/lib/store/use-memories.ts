@@ -86,6 +86,19 @@ export function useMemories() {
     return memory;
   };
 
+  const addExternalMemory = (externalMem: Memory) => {
+    setMemories((prev) => {
+      if (prev.some((m) => m.id === externalMem.id)) return prev;
+      const updated = [externalMem, ...prev];
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+      } catch (err) {
+        console.error("Failed to persist external memory", err);
+      }
+      return updated;
+    });
+  };
+
   const deleteMemory = (id: string) => {
     setMemories((prev) => {
       const updated = prev.filter((m) => m.id !== id);
@@ -96,5 +109,5 @@ export function useMemories() {
     });
   };
 
-  return { memories, isLoaded, saveMemory, deleteMemory };
+  return { memories, isLoaded, saveMemory, addExternalMemory, deleteMemory };
 }
